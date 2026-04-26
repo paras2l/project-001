@@ -63,7 +63,7 @@ def train():
     # ===== INITIALIZE MODEL =====
     print("Initializing model...")
     model = TransformerModel(
-        vocab_size=50262,
+        vocab_size=50268,
         embed_dim=384,
         num_heads=6,
         num_layers=8,

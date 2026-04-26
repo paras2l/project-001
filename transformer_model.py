@@ -13,7 +13,7 @@ from transformer_block import TransformerBlock
 class TransformerModel(nn.Module):
     def __init__(
         self,
-        vocab_size=50262,
+        vocab_size=50268,
         embed_dim=384,
         num_heads=6,
         num_layers=6,
