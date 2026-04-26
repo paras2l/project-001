@@ -12,7 +12,7 @@ class ConversationalEmbedding(nn.Module):
         super().__init__()
         
         # EXACT VALUES MATCHING YOUR EXISTING TOKENIZER + DATALOADER
-        self.vocab_size = 50262      # 50257 GPT2 + 5 special tokens
+        self.vocab_size = 50268      # 50257 GPT2 + 11 special tokens
         self.embed_dim = 384         # Optimal for 1M sequence dataset
         self.max_seq_len = 1024      # Matches dataloader.py MAX_SEQ_LEN
         self.pad_token_id = 50257    # Matches your PAD token ID
