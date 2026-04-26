@@ -22,25 +22,35 @@ CLIP_GRADIENT = 1.0
 BATCH_SIZE = 8
 PAD_TOKEN_ID = 50257
 
-# Checkpoint path (change to Google Drive path on Colab)
-CHECKPOINT_PATH = "latest_checkpoint.pt"
+# ===== PATH CONFIG (COLAB + GOOGLE DRIVE) =====
+DATA_ROOT = "/content/drive/MyDrive/project 001"
 
-# Dataset files (matching your project)
 DATA_FILES = [
-    "tokenized_blended_skill_talk.txt",
-    "tokenized_Cynaptics_persona-chat.txt",
-    "tokenized_kaistlayner_empathy-dataset.txt",
-    "tokenized_multiwoz.txt",
-    "tokenized_OpenAssistant_oasst1.txt",
-    "tokenized_ParlAI_blended_skill_talk.txt",
-    "tokenized_tatsu-lab_alpaca.txt",
-    "tokenized_cornell_movie_dialogs.txt",
-    "tokenized_emojis.txt",
-    "tokenized_wikipedia.txt",
-    "tokenized_squad.txt",
-    "tokenized_dolly.txt",
-    "tokenized_flan.txt",
+    f"{DATA_ROOT}/tokenized_blended_skill_talk.txt",
+    f"{DATA_ROOT}/tokenized_Cynaptics_persona-chat.txt",
+    f"{DATA_ROOT}/tokenized_kaistlayner_empathy-dataset.txt",
+    f"{DATA_ROOT}/tokenized_multiwoz.txt",
+    f"{DATA_ROOT}/tokenized_OpenAssistant_oasst1.txt",
+    f"{DATA_ROOT}/tokenized_ParlAI_blended_skill_talk.txt",
+    f"{DATA_ROOT}/tokenized_tatsu-lab_alpaca.txt",
+    f"{DATA_ROOT}/tokenized_cornell_movie_dialogs.txt",
+    f"{DATA_ROOT}/tokenized_emojis.txt",
+    f"{DATA_ROOT}/tokenized_wikipedia.txt",
+    f"{DATA_ROOT}/tokenized_squad.txt",
+    f"{DATA_ROOT}/tokenized_dolly.txt",
+    f"{DATA_ROOT}/tokenized_flan.txt",
+    f"{DATA_ROOT}/tokenized_opus_en-hi.txt",
+    f"{DATA_ROOT}/tokenized_opus_en-gu.txt",
+    f"{DATA_ROOT}/tokenized_opus_en-ja.txt",
+    f"{DATA_ROOT}/tokenized_opus_en-es.txt",
+    f"{DATA_ROOT}/tokenized_opus_en-ko.txt",
 ]
+
+CHECKPOINT_DIR = f"{DATA_ROOT}/checkpoint"
+CHECKPOINT_PATH = f"{CHECKPOINT_DIR}/latest.pt"
+
+import os
+os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
 # Device setup
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -174,15 +184,24 @@ def train():
         avg_loss = total_loss / len(loader)
         print(f"Epoch {epoch + 1} complete | Avg Loss: {avg_loss:.4f} | LR: {scheduler.get_last_lr()[0]:.6f}")
         
-        # Save checkpoint at end of each epoch
-        torch.save({
+        # Save both: latest (for resume) + epoch copy (for history backup)
+        checkpoint_data = {
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "scheduler": scheduler.state_dict(),
             "epoch": epoch + 1,
             "step": global_step,
-        }, CHECKPOINT_PATH)
-        print(f"Checkpoint saved: {CHECKPOINT_PATH}")
+            "avg_loss": avg_loss
+        }
+        
+        # 1. Overwrite latest checkpoint for resume
+        torch.save(checkpoint_data, CHECKPOINT_PATH)
+        print(f"Latest checkpoint saved: {CHECKPOINT_PATH}")
+        
+        # 2. Save unique epoch checkpoint for backup history
+        epoch_checkpoint_path = f"{CHECKPOINT_DIR}/epoch_{epoch+1}.pt"
+        torch.save(checkpoint_data, epoch_checkpoint_path)
+        print(f"Epoch checkpoint saved: {epoch_checkpoint_path}")
     
     print("\nTraining complete!")
 
