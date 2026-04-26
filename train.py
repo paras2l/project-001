@@ -36,7 +36,6 @@ DATA_FILES = [
     f"{DATA_ROOT}/tokenized_cornell_movie_dialogs.txt",
     f"{DATA_ROOT}/tokenized_emojis.txt",
     f"{DATA_ROOT}/tokenized_wikipedia.txt",
-    f"{DATA_ROOT}/tokenized_squad.txt",
     f"{DATA_ROOT}/tokenized_dolly.txt",
     f"{DATA_ROOT}/tokenized_flan.txt",
     f"{DATA_ROOT}/tokenized_opus_en-hi.txt",
@@ -131,10 +130,10 @@ def train():
                 
                 vocab_size = logits.shape[-1]
                 
-                # Calculate loss using reshape (safer than view)
+                # Calculate loss with contiguous memory layout (AMP safe)
                 loss = loss_fn(
-                    logits.reshape(-1, vocab_size),
-                    targets.reshape(-1)
+                    logits.contiguous().view(-1, vocab_size),
+                    targets.contiguous().view(-1)
                 )
             
             # Loss explosion safety

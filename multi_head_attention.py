@@ -62,7 +62,9 @@ class MultiHeadAttention(nn.Module):
         else:
             combined_mask = causal_mask
         
-        scores = scores.masked_fill(~combined_mask, -1e9)
+        # Safe masking for FP16 / AMP auto precision
+        mask_value = torch.finfo(scores.dtype).min
+        scores = scores.masked_fill(~combined_mask, mask_value)
         
         # Numerical stability
         scores = scores - scores.max(dim=-1, keepdim=True).values
