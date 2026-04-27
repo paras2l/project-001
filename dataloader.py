@@ -82,7 +82,7 @@ def collate_fn(batch, pad_token_id=PAD_TOKEN_ID):
     )
 
 
-def get_dataloader(file_paths, batch_size=BATCH_SIZE, shuffle=True, num_workers=0):
+def get_dataloader(file_paths, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, pin_memory=True):
     """
     Creates a DataLoader for tokenized text files.
     
@@ -102,6 +102,7 @@ def get_dataloader(file_paths, batch_size=BATCH_SIZE, shuffle=True, num_workers=
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
+        pin_memory=pin_memory,
         collate_fn=collate_fn
     )
     
