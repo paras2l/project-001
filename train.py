@@ -93,18 +93,20 @@ def train():
     # ===== RESUME SUPPORT =====
     start_epoch = 0
     global_step = 0
+    ckpt = None
     
     if os.path.exists(CHECKPOINT_PATH):
-        print(f"Resuming from checkpoint: {CHECKPOINT_PATH}")
-        ckpt = torch.load(CHECKPOINT_PATH, map_location=DEVICE)
-        
+        try:
+            ckpt = torch.load(CHECKPOINT_PATH, map_location=DEVICE)
+        except Exception as e:
+            print("Checkpoint corrupted, skipping load:", e)
+    
+    if ckpt is not None:
         model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optimizer"])
         scheduler.load_state_dict(ckpt["scheduler"])
-        
         start_epoch = ckpt["epoch"]
         global_step = ckpt["step"]
-        
         print(f"Resumed from epoch {start_epoch}, step {global_step}")
     
     # ===== TRAINING LOOP =====
@@ -169,15 +171,19 @@ def train():
                 "step": global_step
             })
             
-            # Save checkpoint every 200 steps
+            # Save checkpoint every 200 steps (atomic save to prevent corruption)
             if global_step > 0 and global_step % 200 == 0:
+                temp_path = CHECKPOINT_PATH + ".tmp"
+
                 torch.save({
                     "model": model.state_dict(),
                     "optimizer": optimizer.state_dict(),
                     "scheduler": scheduler.state_dict(),
                     "epoch": epoch,
                     "step": global_step,
-                }, CHECKPOINT_PATH)
+                }, temp_path)
+
+                os.replace(temp_path, CHECKPOINT_PATH)
         
         # End of epoch stats
         avg_loss = total_loss / len(loader)
@@ -193,13 +199,17 @@ def train():
             "avg_loss": avg_loss
         }
         
-        # 1. Overwrite latest checkpoint for resume
-        torch.save(checkpoint_data, CHECKPOINT_PATH)
+        # 1. Overwrite latest checkpoint for resume (atomic save)
+        temp_path = CHECKPOINT_PATH + ".tmp"
+        torch.save(checkpoint_data, temp_path)
+        os.replace(temp_path, CHECKPOINT_PATH)
         print(f"Latest checkpoint saved: {CHECKPOINT_PATH}")
         
-        # 2. Save unique epoch checkpoint for backup history
+        # 2. Save unique epoch checkpoint for backup history (atomic save)
         epoch_checkpoint_path = f"{CHECKPOINT_DIR}/epoch_{epoch+1}.pt"
-        torch.save(checkpoint_data, epoch_checkpoint_path)
+        temp_epoch_path = epoch_checkpoint_path + ".tmp"
+        torch.save(checkpoint_data, temp_epoch_path)
+        os.replace(temp_epoch_path, epoch_checkpoint_path)
         print(f"Epoch checkpoint saved: {epoch_checkpoint_path}")
     
     print("\nTraining complete!")
