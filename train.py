@@ -1,7 +1,7 @@
 """
 Training loop for Conversational LLM
-Resume-safe, Colab-compatible, fully aligned with project pipeline
-Features: AMP, gradient accumulation, checkpointing, NaN safety
+Resume-safe, Colab/Kaggle/Local compatible
+Features: AMP, gradient accumulation, atomic checkpointing, cross platform resume
 """
 import torch
 import torch.nn as nn
@@ -9,6 +9,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from tqdm import tqdm
 import os
+import json
 
 from transformer_model import TransformerModel
 from dataloader import get_dataloader
@@ -22,41 +23,108 @@ CLIP_GRADIENT = 1.0
 BATCH_SIZE = 8
 PAD_TOKEN_ID = 50257
 
-# ===== PATH CONFIG (COLAB + GOOGLE DRIVE) =====
-DATA_ROOT = "/content/drive/MyDrive/project 001"
 
-DATA_FILES = [
-    f"{DATA_ROOT}/tokenized_blended_skill_talk.txt",
-    f"{DATA_ROOT}/tokenized_Cynaptics_persona-chat.txt",
-    f"{DATA_ROOT}/tokenized_kaistlayner_empathy-dataset.txt",
-    f"{DATA_ROOT}/tokenized_multiwoz.txt",
-    f"{DATA_ROOT}/tokenized_OpenAssistant_oasst1.txt",
-    f"{DATA_ROOT}/tokenized_ParlAI_blended_skill_talk.txt",
-    f"{DATA_ROOT}/tokenized_tatsu-lab_alpaca.txt",
-    f"{DATA_ROOT}/tokenized_cornell_movie_dialogs.txt",
-    f"{DATA_ROOT}/tokenized_emojis.txt",
-    f"{DATA_ROOT}/tokenized_wikipedia.txt",
-    f"{DATA_ROOT}/tokenized_dolly.txt",
-    f"{DATA_ROOT}/tokenized_flan.txt",
-    f"{DATA_ROOT}/tokenized_opus_en-hi.txt",
-    f"{DATA_ROOT}/tokenized_opus_en-gu.txt",
-    f"{DATA_ROOT}/tokenized_opus_en-ja.txt",
-    f"{DATA_ROOT}/tokenized_opus_en-es.txt",
-    f"{DATA_ROOT}/tokenized_opus_en-ko.txt",
-]
+# ===== ENVIRONMENT AUTO DETECTION =====
+def get_env():
+    if os.path.exists("/kaggle"):
+        return "kaggle"
+    elif os.path.exists("/content"):
+        return "colab"
+    else:
+        return "local"
 
-CHECKPOINT_DIR = f"{DATA_ROOT}/checkpoint"
-CHECKPOINT_PATH = f"{CHECKPOINT_DIR}/latest.pt"
+ENV = get_env()
 
-import os
+DATA_ROOT = (
+    "/content/drive/MyDrive/project 001"
+    if ENV == "colab"
+    else "/kaggle/working/project 001"
+)
+
+CHECKPOINT_DIR = os.path.join(DATA_ROOT, "checkpoint")
+LATEST_PATH = os.path.join(CHECKPOINT_DIR, "latest.pt")
+RESUME_INFO_PATH = os.path.join(CHECKPOINT_DIR, "resume.json")
+
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
-# Device setup
+print(f"ENV: {ENV}")
+print(f"Checkpoint dir: {CHECKPOINT_DIR}")
+
+
+# ===== DATASET FILES =====
+DATA_FILES = [
+    os.path.join(DATA_ROOT, "tokenized_blended_skill_talk.txt"),
+    os.path.join(DATA_ROOT, "tokenized_Cynaptics_persona-chat.txt"),
+    os.path.join(DATA_ROOT, "tokenized_kaistlayner_empathy-dataset.txt"),
+    os.path.join(DATA_ROOT, "tokenized_multiwoz.txt"),
+    os.path.join(DATA_ROOT, "tokenized_OpenAssistant_oasst1.txt"),
+    os.path.join(DATA_ROOT, "tokenized_ParlAI_blended_skill_talk.txt"),
+    os.path.join(DATA_ROOT, "tokenized_tatsu-lab_alpaca.txt"),
+    os.path.join(DATA_ROOT, "tokenized_cornell_movie_dialogs.txt"),
+    os.path.join(DATA_ROOT, "tokenized_emojis.txt"),
+    os.path.join(DATA_ROOT, "tokenized_wikipedia.txt"),
+    os.path.join(DATA_ROOT, "tokenized_dolly.txt"),
+    os.path.join(DATA_ROOT, "tokenized_flan.txt"),
+    os.path.join(DATA_ROOT, "tokenized_opus_en-hi.txt"),
+    os.path.join(DATA_ROOT, "tokenized_opus_en-gu.txt"),
+    os.path.join(DATA_ROOT, "tokenized_opus_en-ja.txt"),
+    os.path.join(DATA_ROOT, "tokenized_opus_en-es.txt"),
+    os.path.join(DATA_ROOT, "tokenized_opus_en-ko.txt"),
+]
+
+
+# ===== DEVICE SETUP =====
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {DEVICE}")
 
 # AMP scaler for GPU speed boost (30-50% faster)
 scaler = torch.amp.GradScaler("cuda", enabled=(DEVICE.type == "cuda"))
+
+
+# ===== CHECKPOINT SYSTEM =====
+def save_checkpoint(model, optimizer, scheduler, epoch, step, avg_loss):
+    
+    checkpoint_data = {
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "scheduler": scheduler.state_dict(),
+        "epoch": epoch,
+        "step": step,
+        "avg_loss": avg_loss,
+        "env": ENV
+    }
+
+    # 1. Atomic save latest checkpoint for resume
+    temp = LATEST_PATH + ".tmp"
+    torch.save(checkpoint_data, temp)
+    os.replace(temp, LATEST_PATH)
+
+    # 2. Atomic save epoch backup for history
+    epoch_path = os.path.join(CHECKPOINT_DIR, f"epoch_{epoch}.pt")
+    temp_epoch = epoch_path + ".tmp"
+    torch.save(checkpoint_data, temp_epoch)
+    os.replace(temp_epoch, epoch_path)
+
+    # 3. Resume pointer file
+    with open(RESUME_INFO_PATH, "w", encoding="utf-8") as f:
+        json.dump({
+            "epoch": epoch,
+            "step": step,
+            "env": ENV
+        }, f, indent=2)
+
+    print(f"\n✅ [SAVED] epoch={epoch}, step={step}, env={ENV}")
+
+
+def load_checkpoint():
+    if not os.path.exists(LATEST_PATH):
+        return None
+    
+    try:
+        return torch.load(LATEST_PATH, map_location=DEVICE)
+    except Exception as e:
+        print(f"Checkpoint corrupted, starting fresh: {e}")
+        return None
 
 
 def train():
@@ -84,7 +152,7 @@ def train():
     loader = get_dataloader(DATA_FILES, batch_size=BATCH_SIZE, shuffle=True)
     print(f"Total batches per epoch: {len(loader)}")
     
-# Learning rate scheduler with gradient accumulation correction
+    # Learning rate scheduler with gradient accumulation correction
     scheduler = CosineAnnealingLR(
         optimizer,
         T_max=(len(loader) // GRADIENT_ACCUMULATION_STEPS) * EPOCHS
@@ -93,21 +161,17 @@ def train():
     # ===== RESUME SUPPORT =====
     start_epoch = 0
     global_step = 0
-    ckpt = None
     
-    if os.path.exists(CHECKPOINT_PATH):
-        try:
-            ckpt = torch.load(CHECKPOINT_PATH, map_location=DEVICE)
-        except Exception as e:
-            print("Checkpoint corrupted, skipping load:", e)
-    
-    if ckpt is not None:
+    ckpt = load_checkpoint()
+    if ckpt:
         model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optimizer"])
         scheduler.load_state_dict(ckpt["scheduler"])
+        
         start_epoch = ckpt["epoch"]
         global_step = ckpt["step"]
-        print(f"Resumed from epoch {start_epoch}, step {global_step}")
+        
+        print(f"\n✅ RESUMED → epoch {start_epoch}, step {global_step}")
     
     # ===== TRAINING LOOP =====
     model.train()
@@ -171,48 +235,18 @@ def train():
                 "step": global_step
             })
             
-            # Save checkpoint every 200 steps (atomic save to prevent corruption)
+            # Save checkpoint every 200 steps
             if global_step > 0 and global_step % 200 == 0:
-                temp_path = CHECKPOINT_PATH + ".tmp"
-
-                torch.save({
-                    "model": model.state_dict(),
-                    "optimizer": optimizer.state_dict(),
-                    "scheduler": scheduler.state_dict(),
-                    "epoch": epoch,
-                    "step": global_step,
-                }, temp_path)
-
-                os.replace(temp_path, CHECKPOINT_PATH)
+                save_checkpoint(model, optimizer, scheduler, epoch, global_step, total_loss / (step + 1))
         
         # End of epoch stats
         avg_loss = total_loss / len(loader)
-        print(f"Epoch {epoch + 1} complete | Avg Loss: {avg_loss:.4f} | LR: {scheduler.get_last_lr()[0]:.6f}")
+        print(f"\n✅ Epoch {epoch + 1} complete | Avg Loss: {avg_loss:.4f} | LR: {scheduler.get_last_lr()[0]:.6f}")
         
-        # Save both: latest (for resume) + epoch copy (for history backup)
-        checkpoint_data = {
-            "model": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "scheduler": scheduler.state_dict(),
-            "epoch": epoch + 1,
-            "step": global_step,
-            "avg_loss": avg_loss
-        }
-        
-        # 1. Overwrite latest checkpoint for resume (atomic save)
-        temp_path = CHECKPOINT_PATH + ".tmp"
-        torch.save(checkpoint_data, temp_path)
-        os.replace(temp_path, CHECKPOINT_PATH)
-        print(f"Latest checkpoint saved: {CHECKPOINT_PATH}")
-        
-        # 2. Save unique epoch checkpoint for backup history (atomic save)
-        epoch_checkpoint_path = f"{CHECKPOINT_DIR}/epoch_{epoch+1}.pt"
-        temp_epoch_path = epoch_checkpoint_path + ".tmp"
-        torch.save(checkpoint_data, temp_epoch_path)
-        os.replace(temp_epoch_path, epoch_checkpoint_path)
-        print(f"Epoch checkpoint saved: {epoch_checkpoint_path}")
+        # Save checkpoint at end of epoch
+        save_checkpoint(model, optimizer, scheduler, epoch + 1, global_step, avg_loss)
     
-    print("\nTraining complete!")
+    print("\n✅ Training complete!")
 
 
 if __name__ == "__main__":
