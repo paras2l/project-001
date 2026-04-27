@@ -82,7 +82,7 @@ def collate_fn(batch, pad_token_id=PAD_TOKEN_ID):
     )
 
 
-def get_dataloader(file_paths, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, pin_memory=True):
+def get_dataloader(file_paths, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, pin_memory=None):
     """
     Creates a DataLoader for tokenized text files.
     
@@ -96,6 +96,10 @@ def get_dataloader(file_paths, batch_size=BATCH_SIZE, shuffle=True, num_workers=
         DataLoader yielding (input_tensor, target_tensor) batches
     """
     dataset = TextDataset(file_paths)
+    
+    # Auto detect pin_memory based on CUDA availability
+    if pin_memory is None:
+        pin_memory = torch.cuda.is_available()
     
     loader = DataLoader(
         dataset,
