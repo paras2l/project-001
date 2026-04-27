@@ -35,13 +35,21 @@ def get_env():
 
 ENV = get_env()
 
-DATA_ROOT = (
-    "/content/drive/MyDrive/project 001"
-    if ENV == "colab"
-    else "/kaggle/working/project 001"
-)
+# Read only dataset paths
+if ENV == "kaggle":
+    DATA_ROOT = "/kaggle/input/project-001"
+elif ENV == "colab":
+    DATA_ROOT = "/content/drive/MyDrive/project 001"
+else:
+    DATA_ROOT = "./data"
 
-CHECKPOINT_DIR = os.path.join(DATA_ROOT, "checkpoint")
+# Writable checkpoint paths
+if ENV == "kaggle":
+    CHECKPOINT_DIR = "/kaggle/working/checkpoint"
+elif ENV == "colab":
+    CHECKPOINT_DIR = "/content/drive/MyDrive/project 001/checkpoint"
+else:
+    CHECKPOINT_DIR = "./checkpoint"
 LATEST_PATH = os.path.join(CHECKPOINT_DIR, "latest.pt")
 RESUME_INFO_PATH = os.path.join(CHECKPOINT_DIR, "resume.json")
 
