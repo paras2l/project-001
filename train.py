@@ -37,7 +37,7 @@ ENV = get_env()
 
 # Read only dataset paths
 if ENV == "kaggle":
-    DATA_ROOT = "/kaggle/input/project-001"
+    DATA_ROOT = "/kaggle/input/datasets/paraslashkari/project001"
 elif ENV == "colab":
     DATA_ROOT = "/content/drive/MyDrive/project 001"
 else:
