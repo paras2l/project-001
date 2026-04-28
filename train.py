@@ -156,8 +156,32 @@ def train():
     loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN_ID)
     
     # ===== LOAD DATA =====
+    # ===== RESUME SUPPORT =====
+    start_epoch = 0
+    global_step = 0
+    resume_batch_index = 0
+    
+    ckpt = load_checkpoint()
+    if ckpt:
+        model.load_state_dict(ckpt["model"])
+        optimizer.load_state_dict(ckpt["optimizer"])
+        
+        start_epoch = ckpt["epoch"]
+        global_step = ckpt["step"]
+        
+        print(f"\n✅ RESUMED → epoch {start_epoch}, step {global_step}")
+        
+        # 🔥 CALCULATE EXACT RESUME POSITION IN DATASET
+        resume_batch_index = global_step * GRADIENT_ACCUMULATION_STEPS * BATCH_SIZE
+
+    # ===== LOAD DATA =====
     print("Loading dataset...")
-    loader = get_dataloader(DATA_FILES, batch_size=BATCH_SIZE, shuffle=True)
+    loader = get_dataloader(
+        DATA_FILES,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        start_idx=resume_batch_index
+    )
     print(f"Total batches per epoch: {len(loader)}")
     
     # Learning rate scheduler with gradient accumulation correction
@@ -166,20 +190,8 @@ def train():
         T_max=(len(loader) // GRADIENT_ACCUMULATION_STEPS) * EPOCHS
     )
     
-    # ===== RESUME SUPPORT =====
-    start_epoch = 0
-    global_step = 0
-    
-    ckpt = load_checkpoint()
     if ckpt:
-        model.load_state_dict(ckpt["model"])
-        optimizer.load_state_dict(ckpt["optimizer"])
         scheduler.load_state_dict(ckpt["scheduler"])
-        
-        start_epoch = ckpt["epoch"]
-        global_step = ckpt["step"]
-        
-        print(f"\n✅ RESUMED → epoch {start_epoch}, step {global_step}")
     
     # ===== TRAINING LOOP =====
     model.train()
@@ -192,6 +204,10 @@ def train():
         progress_bar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch+1}")
         
         for step, (input_ids, targets, attention_mask) in progress_bar:
+            
+            # 🔥 TRUE RESUME: SKIP OLD DATA WE ALREADY TRAINED
+            if epoch == start_epoch and step < global_step:
+                continue
             
             # Move to device
             input_ids = input_ids.to(DEVICE)
@@ -243,8 +259,8 @@ def train():
                 "step": global_step
             })
             
-            # Save checkpoint every 200 steps
-            if global_step > 0 and global_step % 200 == 0:
+            # Save checkpoint every 200 optimizer steps (800 batches)
+            if (step + 1) % (200 * GRADIENT_ACCUMULATION_STEPS) == 0:
                 save_checkpoint(model, optimizer, scheduler, epoch, global_step, total_loss / (step + 1))
         
         # End of epoch stats

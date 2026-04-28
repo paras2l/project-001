@@ -20,7 +20,7 @@ class TextDataset(Dataset):
     Reads tokenized .txt files where each line is space-separated token IDs.
     Stores all sequences in memory for fast access.
     """
-    def __init__(self, file_paths, max_length=MAX_SEQ_LEN):
+    def __init__(self, file_paths, max_length=MAX_SEQ_LEN, start_idx=0):
         self.sequences = []
         self.max_length = max_length
         
@@ -40,7 +40,10 @@ class TextDataset(Dataset):
                     if len(tokens) > 0:
                         self.sequences.append(tokens)
         
-        print(f"Loaded {len(self.sequences)} sequences")
+        # 🔥 RESUME FROM INDEX
+        self.sequences = self.sequences[start_idx:]
+        
+        print(f"Loaded {len(self.sequences)} sequences (after resume offset)")
     
     def __len__(self):
         return len(self.sequences)
@@ -82,7 +85,7 @@ def collate_fn(batch, pad_token_id=PAD_TOKEN_ID):
     )
 
 
-def get_dataloader(file_paths, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, pin_memory=None):
+def get_dataloader(file_paths, batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=None, start_idx=0):
     """
     Creates a DataLoader for tokenized text files.
     
@@ -95,11 +98,15 @@ def get_dataloader(file_paths, batch_size=BATCH_SIZE, shuffle=True, num_workers=
     Returns:
         DataLoader yielding (input_tensor, target_tensor) batches
     """
-    dataset = TextDataset(file_paths)
+    dataset = TextDataset(file_paths, start_idx=start_idx)
     
     # Auto detect pin_memory based on CUDA availability
     if pin_memory is None:
         pin_memory = torch.cuda.is_available()
+    
+    # 🔥 no shuffle when resuming to preserve order
+    if start_idx > 0:
+        shuffle = False
     
     loader = DataLoader(
         dataset,
