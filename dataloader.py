@@ -40,10 +40,8 @@ class TextDataset(Dataset):
                     if len(tokens) > 0:
                         self.sequences.append(tokens)
         
-        # 🔥 RESUME FROM INDEX
-        self.sequences = self.sequences[start_idx:]
-        
-        print(f"Loaded {len(self.sequences)} sequences (after resume offset)")
+        # Always load full dataset, never cut for resume
+        print(f"Loaded TOTAL sequences: {len(self.sequences)}")
     
     def __len__(self):
         return len(self.sequences)
@@ -104,9 +102,6 @@ def get_dataloader(file_paths, batch_size=BATCH_SIZE, shuffle=False, num_workers
     if pin_memory is None:
         pin_memory = torch.cuda.is_available()
     
-    # 🔥 no shuffle when resuming to preserve order
-    if start_idx > 0:
-        shuffle = False
     
     loader = DataLoader(
         dataset,
