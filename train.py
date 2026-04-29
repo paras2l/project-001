@@ -93,18 +93,18 @@ scaler = torch.amp.GradScaler("cuda", enabled=(DEVICE.type == "cuda"))
 def save_checkpoint(model, optimizer, scheduler, epoch, step, avg_loss):
     
     checkpoint_data = {
-            "model": model.module.state_dict() if isinstance(model, torch.nn.DataParallel) else model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "scheduler": scheduler.state_dict(),
-            "epoch": epoch,
-            "global_step": step,  # for optimizer tracking
-            "step_in_epoch": avg_loss,  # This is actually step_in_epoch in the new logic
-            "avg_loss": avg_loss,
-        }
-        temp = LATEST_PATH + ".tmp"
-        torch.save(checkpoint_data, temp)
-        os.replace(temp, LATEST_PATH)
-        print(f"\n✅ [SAVED] epoch={epoch}, step={avg_loss}")
+        "model": model.module.state_dict() if isinstance(model, torch.nn.DataParallel) else model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "scheduler": scheduler.state_dict(),
+        "epoch": epoch,
+        "global_step": step,  # for optimizer tracking
+        "step_in_epoch": avg_loss,  # This is actually step_in_epoch in the new logic
+        "avg_loss": avg_loss,
+    }
+    temp = LATEST_PATH + ".tmp"
+    torch.save(checkpoint_data, temp)
+    os.replace(temp, LATEST_PATH)
+    print(f"\n✅ [SAVED] epoch={epoch}, step={avg_loss}")
 
 
 def load_checkpoint():
