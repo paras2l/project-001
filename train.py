@@ -213,12 +213,16 @@ def train():
         # Calculate resume step (optimizer steps)
         resume_step = global_step
         if epoch == start_epoch and resume_step > 0:
-            loader = list(loader)[resume_step:]
-            print(f"Resuming from batch {resume_step}")
+            print(f"Skipping first {resume_step} batches...")
 
         progress_bar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch+1}")
 
         for step, (input_ids, targets, attention_mask) in progress_bar:
+            # ✅ FAST SKIP (no computation, no GPU)
+            if epoch == start_epoch and step < resume_step:
+                progress_bar.update(1)
+                continue
+
             # Move to device
             input_ids = input_ids.to(DEVICE)
             targets = targets.to(DEVICE)
