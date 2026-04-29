@@ -145,7 +145,11 @@ def train():
         num_layers=8,
         dropout=0.1
     ).to(DEVICE)
-    
+
+    # Add optimizer and loss_fn after model init
+    optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
+    loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN_ID)
+
     # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total parameters: {total_params:,}")
@@ -207,12 +211,6 @@ def train():
         progress_bar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch+1}")
 
         for step, (input_ids, targets, attention_mask) in progress_bar:
-        for step, (input_ids, targets, attention_mask) in progress_bar:
-            
-            # 🔥 TRUE RESUME: SKIP OLD DATA WE ALREADY TRAINED
-            if epoch == start_epoch and step < global_step:
-                continue
-            
             # Move to device
             input_ids = input_ids.to(DEVICE)
             targets = targets.to(DEVICE)
