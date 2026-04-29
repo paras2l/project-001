@@ -210,16 +210,15 @@ def train():
         print(f"\nEpoch {epoch + 1}/{EPOCHS}")
         total_loss = 0.0
 
+        # Calculate resume step (optimizer steps)
+        resume_step = global_step
+        if epoch == start_epoch and resume_step > 0:
+            loader = list(loader)[resume_step:]
+            print(f"Resuming from batch {resume_step}")
+
         progress_bar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch+1}")
 
-        # Calculate resume step for skipping batches only in the first (resumed) epoch
-        resume_step = global_step * GRADIENT_ACCUMULATION_STEPS
-
         for step, (input_ids, targets, attention_mask) in progress_bar:
-            # ✅ Only skip when resuming SAME epoch
-            if epoch == start_epoch and step < resume_step:
-                continue
-
             # Move to device
             input_ids = input_ids.to(DEVICE)
             targets = targets.to(DEVICE)
