@@ -150,59 +150,63 @@ def train():
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total parameters: {total_params:,}")
     
-    # ===== OPTIMIZER & SCHEDULER =====
-    optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
-    
-    loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN_ID)
-    
-    # ===== LOAD DATA =====
     # ===== RESUME SUPPORT =====
     start_epoch = 0
     global_step = 0
     resume_batch_index = 0
-    
+
     ckpt = load_checkpoint()
     if ckpt:
         model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optimizer"])
-        
+
         start_epoch = ckpt["epoch"]
         global_step = ckpt["step"]
-        
+
         print(f"\n✅ RESUMED → epoch {start_epoch}, step {global_step}")
-        
+
         # 🔥 CALCULATE EXACT RESUME POSITION IN DATASET
         resume_batch_index = global_step * GRADIENT_ACCUMULATION_STEPS * BATCH_SIZE
 
-    # ===== LOAD DATA =====
-    print("Loading dataset...")
-    loader = get_dataloader(
-        DATA_FILES,
-        batch_size=BATCH_SIZE,
-        shuffle=False,
-        start_idx=resume_batch_index
-    )
-    print(f"Total batches per epoch: {len(loader)}")
-    
-    # Learning rate scheduler with gradient accumulation correction
-    scheduler = CosineAnnealingLR(
-        optimizer,
-        T_max=(len(loader) // GRADIENT_ACCUMULATION_STEPS) * EPOCHS
-    )
-    
-    if ckpt:
-        scheduler.load_state_dict(ckpt["scheduler"])
-    
+    scheduler = None
+
     # ===== TRAINING LOOP =====
     model.train()
     print("\nStarting training...")
-    
+
     for epoch in range(start_epoch, EPOCHS):
+
+        if epoch == start_epoch:
+            start_idx = resume_batch_index
+        else:
+            start_idx = 0  # 🔥 full dataset after first epoch
+
+        print(f"\nLoading dataset for epoch {epoch+1} (start_idx={start_idx})")
+
+        loader = get_dataloader(
+            DATA_FILES,
+            batch_size=BATCH_SIZE,
+            shuffle=False,
+            start_idx=start_idx
+        )
+
+        print(f"Total batches this epoch: {len(loader)}")
+
+        # (Re-)initialize scheduler on first epoch
+        if scheduler is None:
+            scheduler = CosineAnnealingLR(
+                optimizer,
+                T_max=(len(loader) // GRADIENT_ACCUMULATION_STEPS) * EPOCHS
+            )
+            if ckpt:
+                scheduler.load_state_dict(ckpt["scheduler"])
+
         print(f"\nEpoch {epoch + 1}/{EPOCHS}")
         total_loss = 0.0
-        
+
         progress_bar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch+1}")
-        
+
+        for step, (input_ids, targets, attention_mask) in progress_bar:
         for step, (input_ids, targets, attention_mask) in progress_bar:
             
             # 🔥 TRUE RESUME: SKIP OLD DATA WE ALREADY TRAINED
