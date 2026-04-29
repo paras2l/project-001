@@ -163,6 +163,7 @@ def train():
     
     # ===== RESUME SUPPORT =====
 
+
     start_epoch = 0
     global_step = 0
 
@@ -178,13 +179,17 @@ def train():
         start_epoch = ckpt["epoch"]
         global_step = ckpt["step"]
 
-        print(f"\n✅ RESUMED → epoch {start_epoch}, step {global_step}")
+    # === RESUME/SKIP LOGIC ===
+    resume_step = global_step * GRADIENT_ACCUMULATION_STEPS
+    skip_done = False
+    print(f"\n✅ RESUMED → epoch {start_epoch}, step {global_step}")
 
     scheduler = None
 
     # ===== TRAINING LOOP =====
     model.train()
     print("\nStarting training...")
+
 
 
     for epoch in range(start_epoch, EPOCHS):
@@ -210,18 +215,14 @@ def train():
         print(f"\nEpoch {epoch + 1}/{EPOCHS}")
         total_loss = 0.0
 
-        # Calculate resume step (optimizer steps)
-        resume_step = global_step
-        if epoch == start_epoch and resume_step > 0:
-            print(f"Skipping first {resume_step} batches...")
-
         progress_bar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch+1}")
 
         for step, (input_ids, targets, attention_mask) in progress_bar:
-            # ✅ FAST SKIP (no computation, no GPU)
-            if epoch == start_epoch and step < resume_step:
-                progress_bar.update(1)
+            # ✅ SKIP ONLY ONCE (only resumed epoch)
+            if not skip_done and epoch == start_epoch and step < resume_step:
                 continue
+
+            skip_done = True  # 🔥 disables skipping forever after first real batch
 
             # Move to device
             input_ids = input_ids.to(DEVICE)
@@ -276,15 +277,6 @@ def train():
             # Save checkpoint every 200 optimizer steps (800 batches)
             if (step + 1) % (200 * GRADIENT_ACCUMULATION_STEPS) == 0:
                 save_checkpoint(model, optimizer, scheduler, epoch, global_step, total_loss / (step + 1))
-        
-        # End of epoch stats
-        avg_loss = total_loss / len(loader)
-        print(f"\n✅ Epoch {epoch + 1} complete | Avg Loss: {avg_loss:.4f} | LR: {scheduler.get_last_lr()[0]:.6f}")
-        
-        # Save checkpoint at end of epoch
-        save_checkpoint(model, optimizer, scheduler, epoch + 1, global_step, avg_loss)
-    
-    print("\n✅ Training complete!")
 
 
 if __name__ == "__main__":
