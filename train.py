@@ -90,21 +90,28 @@ scaler = torch.amp.GradScaler("cuda", enabled=(DEVICE.type == "cuda"))
 
 
 # ===== CHECKPOINT SYSTEM =====
-def save_checkpoint(model, optimizer, scheduler, epoch, step, avg_loss):
+def save_checkpoint(model, optimizer, scheduler, epoch, global_step, avg_loss, step_in_epoch):
     
     checkpoint_data = {
         "model": model.module.state_dict() if isinstance(model, torch.nn.DataParallel) else model.state_dict(),
         "optimizer": optimizer.state_dict(),
         "scheduler": scheduler.state_dict(),
         "epoch": epoch,
-        "global_step": step,  # for optimizer tracking
-        "step_in_epoch": avg_loss,  # This is actually step_in_epoch in the new logic
+        "global_step": global_step,
+        "step_in_epoch": step_in_epoch,
         "avg_loss": avg_loss,
     }
     temp = LATEST_PATH + ".tmp"
     torch.save(checkpoint_data, temp)
     os.replace(temp, LATEST_PATH)
-    print(f"\n✅ [SAVED] epoch={epoch}, step={avg_loss}")
+
+    # save epoch-wise backup
+    epoch_path = os.path.join(CHECKPOINT_DIR, f"epoch_{epoch}.pt")
+    temp_epoch = epoch_path + ".tmp"
+    torch.save(checkpoint_data, temp_epoch)
+    os.replace(temp_epoch, epoch_path)
+
+    print(f"\n✅ [SAVED] epoch={epoch}, global_step={global_step}, step_in_epoch={step_in_epoch}")
 
 
 def load_checkpoint():
@@ -157,9 +164,9 @@ def train():
             model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optimizer"])
         start_epoch = ckpt["epoch"]
-        global_step = ckpt.get("global_step", 0)
+        global_step = ckpt["global_step"]
         resume_step = ckpt.get("step_in_epoch", 0)
-        print(f"\n✅ RESUMED → epoch {start_epoch}, step {resume_step}")
+        print(f"\n✅ RESUMED → epoch {start_epoch}, step_in_epoch {resume_step}")
 
     scheduler = None
 
@@ -232,7 +239,18 @@ def train():
             })
 
             if (step + 1) % (200 * GRADIENT_ACCUMULATION_STEPS) == 0:
-                save_checkpoint(model, optimizer, scheduler, epoch, global_step, total_loss / (step + 1))
+                save_checkpoint(model, optimizer, scheduler, epoch, global_step, total_loss / (step + 1), step)
+
+        # Save at end of epoch — next epoch starts from step 0
+        save_checkpoint(
+            model,
+            optimizer,
+            scheduler,
+            epoch + 1,
+            global_step,
+            total_loss / len(loader),
+            0
+        )
 
 
 if __name__ == "__main__":
