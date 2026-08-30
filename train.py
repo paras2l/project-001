@@ -16,7 +16,7 @@ from dataloader import get_dataloader
 
 
 # ===== CONFIGURATION =====
-EPOCHS = 10
+EPOCHS = 15
 LEARNING_RATE = 3e-4
 GRADIENT_ACCUMULATION_STEPS = 4
 CLIP_GRADIENT = 1.0
@@ -64,7 +64,6 @@ DATA_FILES = [
     os.path.join(DATA_ROOT, "tokenized_blended_skill_talk.txt"),
     os.path.join(DATA_ROOT, "tokenized_Cynaptics_persona-chat.txt"),
     os.path.join(DATA_ROOT, "tokenized_kaistlayner_empathy-dataset.txt"),
-    os.path.join(DATA_ROOT, "tokenized_multiwoz.txt"),
     os.path.join(DATA_ROOT, "tokenized_OpenAssistant_oasst1.txt"),
     os.path.join(DATA_ROOT, "tokenized_ParlAI_blended_skill_talk.txt"),
     os.path.join(DATA_ROOT, "tokenized_tatsu-lab_alpaca.txt"),
@@ -73,11 +72,6 @@ DATA_FILES = [
     os.path.join(DATA_ROOT, "tokenized_wikipedia.txt"),
     os.path.join(DATA_ROOT, "tokenized_dolly.txt"),
     os.path.join(DATA_ROOT, "tokenized_flan.txt"),
-    os.path.join(DATA_ROOT, "tokenized_opus_en-hi.txt"),
-    os.path.join(DATA_ROOT, "tokenized_opus_en-gu.txt"),
-    os.path.join(DATA_ROOT, "tokenized_opus_en-ja.txt"),
-    os.path.join(DATA_ROOT, "tokenized_opus_en-es.txt"),
-    os.path.join(DATA_ROOT, "tokenized_opus_en-ko.txt"),
 ]
 
 
